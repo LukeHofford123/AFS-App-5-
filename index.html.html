@@ -1579,7 +1579,7 @@ html, body {
                         <tr>
                             <th>Cat. Lyr</th>
 <th>Cat. Type</th>
-<th>Ht (in)</th>
+<th>Ht</th>
 <th>L. Vol (ft³)</th>
 <th>C. Vol (ft³)</th>
                         </tr>
@@ -1612,7 +1612,7 @@ html, body {
                         <tr>
                             <th>Cat. Lyr</th>
 <th>Cat. Type</th>
-<th>Ht (in)</th>
+<th>Ht</th>
 <th>L. Vol (ft³)</th>
 <th>C. Vol (ft³)</th>
 
@@ -2198,40 +2198,41 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function generateTest1Table() {
+  // Retrieve measurement type and reactor diameter from the DOM.
   const measurementType = localStorage.getItem("selectedMeasurement") || "imperial";
   let reactorDiameter = parseFloat(document.getElementById("reactorDiameter").value) || 0;
   
-  // For calculations, convert reactor diameter to feet if in metric
-  let diameterFeet = measurementType === "metric" ? convertUnits(reactorDiameter, "meters", "feet") : reactorDiameter;
+  // Convert reactor diameter to feet if using metric units.
+  let diameterFeet = measurementType === "metric"
+    ? convertUnits(reactorDiameter, "meters", "feet")
+    : reactorDiameter;
   
-  // Get current capture sum (if in metric, convert displayed m³ back to ft³)
-  let currentCaptureSum_ft3 = measurementType === "metric" 
+  // Get the current capture sum (if using metric, convert displayed m³ back to ft³).
+  let currentCaptureSum_ft3 = measurementType === "metric"
     ? parseFloat(document.getElementById("currentCaptureSum").textContent) / 0.0283168
     : parseFloat(document.getElementById("currentCaptureSum").textContent) || 0;
   
-  // Target capture is 150% of current (in ft³)
+  // Define the target capture sum as 150% of the current capture sum (in ft³).
   const targetCaptureSum = currentCaptureSum_ft3 * 1.5;
   
-  // Fixed layers (rings) have known capture volumes in ft³:
-  const fixedLayer4CV = 0.17, fixedLayer5CV = 0.16;
-  const requiredCaptureSum = targetCaptureSum - (fixedLayer4CV + fixedLayer5CV);
-  
-  // Catalyst selection based on reactor size
+  // Select catalysts based on reactor size.
   const selectedCatalysts = diameterFeet >= 5 
     ? ["AFS-4525", "AFS-4550", "AFS-4510"]
     : ["AFS-3325", "AFS-3350", "AFS-3310"];
   
-  // Base heights for layers 1-3 in imperial (inches)
+  // Define base heights for layers 1-3 (in inches).
   const baseHeightsInches = [12, 14, 16];
   
-  // Clear table
+  // Clear the table with id "test1Table".
   const table = document.getElementById("test1Table");
   table.innerHTML = "";
   
+  // Initialize total volumes and an array to hold table rows.
   let totalLoadedVolume_ft3 = 0;
-  let totalCaptureVolume_ft3 = fixedLayer4CV + fixedLayer5CV; // start with fixed layers
+  let totalCaptureVolume_ft3 = 0;
+  let rowsData = [];
   
-  // Calculate base capture sum for layers 1-3
+  // Calculate the base capture sum for layers 1-3 using default heights.
   let baseCaptureSum = 0;
   for (let i = 0; i < 3; i++) {
     let heightInches = baseHeightsInches[i];
@@ -2240,11 +2241,10 @@ function generateTest1Table() {
     baseCaptureSum += cv;
   }
   
-  // Determine scale factor needed for layers 1-3
-  let scaleFactor = targetCaptureSum / (baseCaptureSum);
+  // Determine the scale factor needed for layers 1-3 to reach the target capture sum.
+  let scaleFactor = targetCaptureSum / baseCaptureSum;
   
-  // Build rows for layers 1-3 using adjusted heights
-  let rowsData = [];
+  // Build rows for layers 1-3 with adjusted (scaled) heights.
   for (let i = 0; i < 3; i++) {
     let catalystType = selectedCatalysts[i];
     let heightInches = baseHeightsInches[i] * scaleFactor;
@@ -2252,9 +2252,11 @@ function generateTest1Table() {
     let cv = lv * (catalystData[catalystType]?.cvFactor || 0);
     rowsData.push({
       layer: i + 1,
-      catalystType,
-      // For display: if metric, show height in cm; otherwise in inches
-      height: measurementType === "metric" ? convertUnits(heightInches, "inches", "cm") : heightInches,
+      catalystType: catalystType,
+      // Display height in cm if metric, otherwise in inches.
+      height: measurementType === "metric" 
+                ? convertUnits(heightInches, "inches", "cm") 
+                : heightInches,
       loadedVolume: lv,
       captureVolume: cv
     });
@@ -2262,37 +2264,40 @@ function generateTest1Table() {
     totalCaptureVolume_ft3 += cv;
   }
   
-  // Fixed layers (rings) – remain unchanged
+  // Fixed layers (rings) - calculate dynamically using catalyst data.
   const fixedLayers = [
-    { layer: 4, type: "6.4mm Ring", height: 3, captureVolume: fixedLayer4CV },
-    { layer: 5, type: "4.8mm Ring", height: 3, captureVolume: fixedLayer5CV }
+    { layer: 4, type: "6.4mm Ring", height: 3 },
+    { layer: 5, type: "4.8mm Ring", height: 3 }
   ];
   
   fixedLayers.forEach(ring => {
-    let heightInches = ring.height; // already in inches
+    let heightInches = ring.height; // Given in inches.
     let lv = (heightInches * Math.PI * Math.pow(diameterFeet / 2, 2)) / 12;
+    let cvFactor = catalystData[ring.type]?.cvFactor || 0;
+    let cv = lv * cvFactor;
     rowsData.push({
       layer: ring.layer,
       catalystType: ring.type,
-      height: measurementType === "metric" ? convertUnits(heightInches, "inches", "cm") : heightInches,
+      height: measurementType === "metric" 
+                ? convertUnits(heightInches, "inches", "cm") 
+                : heightInches,
       loadedVolume: lv,
-      captureVolume: ring.captureVolume
+      captureVolume: cv
     });
     totalLoadedVolume_ft3 += lv;
-    totalCaptureVolume_ft3 += ring.captureVolume;
+    totalCaptureVolume_ft3 += cv;
   });
   
-  // Populate table rows (convert volumes for display if needed)
+  // Populate the table rows, converting volumes for display as needed.
   rowsData.forEach(row => {
     let heightDisplay = row.height.toFixed(2) + (measurementType === "metric" ? " cm" : " in");
     let loadedDisplay = measurementType === "metric"
-  ? (row.loadedVolume * 0.0283168).toFixed(3) + " m³"
-  : row.loadedVolume.toFixed(3) + " ft³";
-
-let captureDisplay = measurementType === "metric"
-  ? (row.captureVolume * 0.0283168).toFixed(3) + " m³"
-  : row.captureVolume.toFixed(3) + " ft³";
-
+      ? (row.loadedVolume * 0.0283168).toFixed(3) + " m³"
+      : row.loadedVolume.toFixed(3) + " ft³";
+    let captureDisplay = measurementType === "metric"
+      ? (row.captureVolume * 0.0283168).toFixed(3) + " m³"
+      : row.captureVolume.toFixed(3) + " ft³";
+  
     table.innerHTML += `
       <tr>
         <td>${row.layer}</td>
@@ -2304,7 +2309,7 @@ let captureDisplay = measurementType === "metric"
     `;
   });
   
-  // Update footer sums (convert if metric)
+  // Update the footer sums with proper unit conversion.
   let loadedSumDisplay = measurementType === "metric" 
     ? (totalLoadedVolume_ft3 * 0.0283168).toFixed(5) + " m³" 
     : totalLoadedVolume_ft3.toFixed(5) + " ft³";
@@ -2312,9 +2317,8 @@ let captureDisplay = measurementType === "metric"
     ? (totalCaptureVolume_ft3 * 0.0283168).toFixed(5) + " m³" 
     : totalCaptureVolume_ft3.toFixed(5) + " ft³";
   
-    document.getElementById("test1LoadedSum").textContent = loadedSumDisplay; // Make sure it's .toFixed(2)
-document.getElementById("test1CaptureSum").textContent = captureSumDisplay;
-
+  document.getElementById("test1LoadedSum").textContent = loadedSumDisplay;
+  document.getElementById("test1CaptureSum").textContent = captureSumDisplay;
 }
 
 
@@ -2322,17 +2326,19 @@ document.getElementById("test1CaptureSum").textContent = captureSumDisplay;
 function generateExactMatchTable() {
   const measurementType = localStorage.getItem("selectedMeasurement") || "imperial";
   let reactorDiameter = parseFloat(document.getElementById("reactorDiameter").value) || 0;
-  let diameterFeet = measurementType === "metric" ? convertUnits(reactorDiameter, "meters", "feet") : reactorDiameter;
+  let diameterFeet = measurementType === "metric" 
+    ? convertUnits(reactorDiameter, "meters", "feet")
+    : reactorDiameter;
   
   // Get current capture sum (convert to ft³ if metric)
   let currentCaptureSum_ft3 = measurementType === "metric" 
     ? parseFloat(document.getElementById("currentCaptureSum").textContent) / 0.0283168
     : parseFloat(document.getElementById("currentCaptureSum").textContent) || 0;
   
-  // Fixed layers (rings)
+  // Fixed layers (rings) defined without hardcoded captureVolume.
   const fixedLayers = [
-    { layer: 4, type: "6.4mm Ring", height: 3, captureVolume: 0.17 },
-    { layer: 5, type: "4.8mm Ring", height: 3, captureVolume: 0.16 }
+    { layer: 4, type: "6.4mm Ring", height: 3 },
+    { layer: 5, type: "4.8mm Ring", height: 3 }
   ];
   
   const selectedCatalysts = diameterFeet >= 5
@@ -2347,10 +2353,10 @@ function generateExactMatchTable() {
   table.innerHTML = "";
   
   let totalLoadedVolume_ft3 = 0;
-  let totalCaptureVolume_ft3 = 0.17 + 0.16;
+  let totalCaptureVolume_ft3 = 0; // Start at 0; fixed layers will be added dynamically.
   let rowsData = [];
   
-  // Calculate base capture sum for layers 1-3
+  // Calculate base capture sum for layers 1-3 using default heights
   let baseCaptureSum = 0;
   for (let i = 0; i < 3; i++) {
     let heightInches = baseHeightsInches[i];
@@ -2370,8 +2376,10 @@ function generateExactMatchTable() {
     let cv = lv * (catalystData[catalystType]?.cvFactor || 0);
     rowsData.push({
       layer: i + 1,
-      catalystType,
-      height: measurementType === "metric" ? convertUnits(heightInches, "inches", "cm") : heightInches,
+      catalystType: catalystType,
+      height: measurementType === "metric" 
+                ? convertUnits(heightInches, "inches", "cm")
+                : heightInches,
       loadedVolume: lv,
       captureVolume: cv
     });
@@ -2379,22 +2387,26 @@ function generateExactMatchTable() {
     totalCaptureVolume_ft3 += cv;
   }
   
-  // Add fixed layers
+  // Add fixed layers (rings) dynamically using catalyst data.
   fixedLayers.forEach(ring => {
-    let heightInches = ring.height;
+    let heightInches = ring.height; // Already in inches.
     let lv = (heightInches * Math.PI * Math.pow(diameterFeet / 2, 2)) / 12;
+    let cvFactor = catalystData[ring.type]?.cvFactor || 0;
+    let cv = lv * cvFactor;
     rowsData.push({
       layer: ring.layer,
       catalystType: ring.type,
-      height: measurementType === "metric" ? convertUnits(heightInches, "inches", "cm") : heightInches,
+      height: measurementType === "metric" 
+                ? convertUnits(heightInches, "inches", "cm")
+                : heightInches,
       loadedVolume: lv,
-      captureVolume: ring.captureVolume
+      captureVolume: cv
     });
     totalLoadedVolume_ft3 += lv;
-    totalCaptureVolume_ft3 += ring.captureVolume;
+    totalCaptureVolume_ft3 += cv;
   });
   
-  // Populate table rows
+  // Populate table rows (convert volumes for display if needed)
   rowsData.forEach(row => {
     let heightDisplay = row.height.toFixed(2) + (measurementType === "metric" ? " cm" : " in");
     let loadedDisplay = measurementType === "metric" 
@@ -2403,6 +2415,7 @@ function generateExactMatchTable() {
     let captureDisplay = measurementType === "metric" 
       ? (row.captureVolume * 0.0283168).toFixed(3) + " m³" 
       : row.captureVolume.toFixed(3) + " ft³";
+  
     table.innerHTML += `
       <tr>
         <td>${row.layer}</td>
@@ -2414,7 +2427,7 @@ function generateExactMatchTable() {
     `;
   });
   
-  // For Exact Match, we force the capture sum to equal currentCaptureSum (displayed in metric or imperial)
+  // For Exact Match, force the capture sum to equal currentCaptureSum (displayed in metric or imperial)
   let captureSumDisplay = measurementType === "metric" 
     ? (currentCaptureSum_ft3 * 0.0283168).toFixed(3) + " m³" 
     : currentCaptureSum_ft3.toFixed(3) + " ft³";
